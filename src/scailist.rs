@@ -72,54 +72,9 @@ pub struct ScAIList<T> {
 
 /// The ScAIList itself
 impl<T> ScAIList<T> {
-    /// Binary search to find the right most index where interval.start < query.stop
-    #[inline]
-    pub fn upper_bound(stop: u32, intervals: &[Interval<T>]) -> Option<usize> {
-        let mut right = intervals.len();
-        let mut left = 0;
-
-        if intervals[right - 1].start < stop {
-            // last start pos is less than the stop, then return the last pos
-            return Some(right - 1);
-        } else if intervals[left].start >= stop {
-            // first start pos > stop, not in this cluster at all
-            return None;
-        }
-
-        while right > 0 {
-            let half = right / 2;
-            let other_half = right - half;
-            let probe = left + half;
-            let other_left = left + other_half;
-            let v = &intervals[probe];
-            right = half;
-            left = if v.start < stop { other_left } else { left }
-        }
-        // Guarded at the top from ending on either extreme
-        if intervals[left].start >= stop {
-            Some(left - 1)
-        } else {
-            Some(left)
-        }
-    }
-}
-
-impl<'a, T> IvStore<'a, T> for ScAIList<T>
-where
-    T: 'a,
-{
-    type IvSearchIterator = IterFind<'a, T>;
-    type IvIterator = IterScAIList<'a, T>;
-    type SelfU32 = ScAIList<u32>;
-    /// Create a new ScAIList out of the passed in intervals. The min_cov_len should probably be
-    /// left as default, which is 20. It dictates how far ahead to look from a given point to
-    /// determine if that interval covers enough other intervals to be moved to a sublist. The
-    /// number of intervals it has to cover is equal to min_cov_len / 2. The number of sublists
-    /// that might be fored is capped at intervals.len().log2(), but if there aren't many overlaps,
-    /// fewer will be created.
-    fn new(mut input_intervals: Vec<Interval<T>>) -> Self {
+    fn new_min_cov(mut input_intervals: Vec<Interval<T>>, min_cov_len: Option<usize>) -> Self {
         let max_comps = (input_intervals.len() as f64).log2().floor() as usize + 1;
-        let min_cov_len = 20; // number of elements ahead to check for cov
+        let min_cov_len = min_cov_len.unwrap_or(20); // number of elements ahead to check for cov
         let min_cov = min_cov_len / 2; // the number of elemnts covered to trigger an extraction
 
         let num_comps; // number of components
@@ -205,6 +160,55 @@ where
             max_ends,
             intervals: decomposed.into_iter().map(|x| x.unwrap()).collect(),
         }
+    }
+    /// Binary search to find the right most index where interval.start < query.stop
+    #[inline]
+    pub fn upper_bound(stop: u32, intervals: &[Interval<T>]) -> Option<usize> {
+        let mut right = intervals.len();
+        let mut left = 0;
+
+        if intervals[right - 1].start < stop {
+            // last start pos is less than the stop, then return the last pos
+            return Some(right - 1);
+        } else if intervals[left].start >= stop {
+            // first start pos > stop, not in this cluster at all
+            return None;
+        }
+
+        while right > 0 {
+            let half = right / 2;
+            let other_half = right - half;
+            let probe = left + half;
+            let other_left = left + other_half;
+            let v = &intervals[probe];
+            right = half;
+            left = if v.start < stop { other_left } else { left }
+        }
+        // Guarded at the top from ending on either extreme
+        if intervals[left].start >= stop {
+            Some(left - 1)
+        } else {
+            Some(left)
+        }
+    }
+}
+
+impl<'a, T> IvStore<'a, T> for ScAIList<T>
+where
+    T: 'a,
+{
+    type IvSearchIterator = IterFind<'a, T>;
+    type IvIterator = IterScAIList<'a, T>;
+    type SelfU32 = ScAIList<u32>;
+
+    /// Create a new ScAIList out of the passed in intervals. The min_cov_len should probably be
+    /// left as default, which is 20. It dictates how far ahead to look from a given point to
+    /// determine if that interval covers enough other intervals to be moved to a sublist. The
+    /// number of intervals it has to cover is equal to min_cov_len / 2. The number of sublists
+    /// that might be fored is capped at intervals.len().log2(), but if there aren't many overlaps,
+    /// fewer will be created.
+    fn new(input_intervals: Vec<Interval<T>>) -> Self {
+        ScAIList::new_min_cov(input_intervals, None)
     }
 
     #[inline]
@@ -354,7 +358,7 @@ mod tests {
                 val: 0,
             })
             .collect();
-        let lapper = ScAIList::new(data, Some(4));
+        let lapper = ScAIList::new_min_cov(data, Some(4));
         lapper
     }
     fn setup_overlapping() -> ScAIList<u32> {
@@ -366,7 +370,7 @@ mod tests {
                 val: 0,
             })
             .collect();
-        let lapper = ScAIList::new(data, Some(4));
+        let lapper = ScAIList::new_min_cov(data, Some(4));
         lapper
     }
     fn setup_badlapper() -> ScAIList<u32> {
@@ -382,7 +386,7 @@ mod tests {
             Iv{start: 68, stop: 71, val: 0}, // overlap start
             Iv{start: 70, stop: 75, val: 0},
         ];
-        let lapper = ScAIList::new(data, Some(4));
+        let lapper = ScAIList::new_min_cov(data, Some(4));
         lapper
     }
     fn setup_single() -> ScAIList<u32> {
@@ -391,7 +395,7 @@ mod tests {
             stop: 35,
             val: 0,
         }];
-        let lapper = ScAIList::new(data, Some(4));
+        let lapper = ScAIList::new_min_cov(data, Some(4));
         lapper
     }
 
@@ -557,7 +561,7 @@ mod tests {
             //Iv{start: 70, end: 75, val: 0},
         //];
         
-        //let (mut lapper1, mut lapper2) = (ScAIList::new(data1), ScAIList::new(data2)) ;
+        //let (mut lapper1, mut lapper2) = (ScAIList::new_min_cov(data1), ScAIList::new(data2)) ;
         //// Should be the same either way it's calculated
         //let (union, intersect) = lapper1.union_and_intersect(&lapper2);
         //assert_eq!(intersect, 10);
@@ -597,7 +601,7 @@ mod tests {
             Iv{start: 111, stop: 160, val: 0},
             Iv{start: 150, stop: 200, val: 0},
         ];
-        let lapper = ScAIList::new(data1, Some(4));
+        let lapper = ScAIList::new_min_cov(data1, Some(4));
         let found = lapper.find(8, 11).collect::<Vec<&Iv>>();
         assert_eq!(found, vec![
             &Iv{start: 1, stop: 10, val: 0}, 
@@ -625,7 +629,7 @@ mod tests {
             Iv{start: 9, stop: 11, val: 0}, // 3
             Iv{start: 10, stop: 13, val: 0}, // 2
         ];
-        let lapper = ScAIList::new(data1, Some(2));
+        let lapper = ScAIList::new_min_cov(data1, Some(2));
         let mut count = 0;
         for iv in lapper.iter() {
             count += lapper.find(iv.start, iv.stop).count();
@@ -640,7 +644,7 @@ mod tests {
             //Iv{start: 0, end: 10, val: 0},
             //Iv{start: 5, end: 10, val: 0}
         //];
-        //let lapper = ScAIList::new(data1);
+        //let lapper = ScAIList::new_min_cov(data1);
         //let found = lapper.depth().collect::<Vec<Interval<u32>>>();
         //assert_eq!(found, vec![
                    //Interval{start: 0, end: 5, val: 1},
@@ -659,7 +663,7 @@ mod tests {
             //Iv{start: 5, end: 8, val: 0},
             //Iv{start: 9, end: 11, val: 0},
         //];
-        //let lapper = ScAIList::new(data1);
+        //let lapper = ScAIList::new_min_cov(data1);
         //let found = lapper.depth().collect::<Vec<Interval<u32>>>();
         //assert_eq!(found, vec![
                    //Interval{start: 1, end: 2, val: 1},
@@ -682,7 +686,7 @@ mod tests {
             //Iv{start: 9, end: 11, val: 0},
             //Iv{start: 15, end: 20, val: 0},
         //];
-        //let lapper = ScAIList::new(data1);
+        //let lapper = ScAIList::new_min_cov(data1);
         //let found = lapper.depth().collect::<Vec<Interval<u32>>>();
         //assert_eq!(found, vec![
                    //Interval{start: 1, end: 2, val: 1},
@@ -733,7 +737,7 @@ mod tests {
             Iv{start:27959118, stop: 27959171	, val: 0},
             Iv{start:28866309, stop: 33141404	, val: 0},
         ];
-        let lapper = ScAIList::new(data, None);
+        let lapper = ScAIList::new_min_cov(data, None);
 
         let found = lapper.find(28974798, 33141355).collect::<Vec<&Iv>>();
         assert_eq!(found, vec![
