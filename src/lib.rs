@@ -1,3 +1,4 @@
+pub mod bits;
 pub mod interval;
 pub mod ivstore;
 pub mod rust_lapper;

@@ -522,7 +522,7 @@ mod tests {
 
     #[test]
     fn test_merge_overlaps() {
-        let mut lapper = setup_badlapper();
+        let lapper = setup_badlapper();
         let expected: Vec<&Iv> = vec![
             &Iv{start: 10, stop: 16, val: 0},
             &Iv{start: 40, stop: 45, val: 0},

@@ -389,45 +389,31 @@ mod tests {
         let lapper = ScAIList::new_min_cov(data, Some(4));
         lapper
     }
-    fn setup_single() -> ScAIList<u32> {
-        let data: Vec<Iv> = vec![Iv {
-            start: 10,
-            stop: 35,
-            val: 0,
-        }];
-        let lapper = ScAIList::new_min_cov(data, Some(4));
-        lapper
-    }
 
     // Test that a query end that hits an interval start returns no interval
     #[test]
     fn test_query_end_interval_start() {
         let lapper = setup_nonoverlapping();
         assert_eq!(None, lapper.find(15, 20).next());
-        //assert_eq!(None, lapper.seek(15, 20, &mut cursor).next())
     }
 
     // Test that a query start that hits an interval end returns no interval
     #[test]
     fn test_query_start_interval_end() {
         let lapper = setup_nonoverlapping();
-        //let mut cursor = 0;
         assert_eq!(None, lapper.find(30, 35).next());
-        //assert_eq!(None, lapper.seek(30, 35, &mut cursor).next())
     }
 
     // Test that a query that overlaps the start of an interval returns that interval
     #[test]
     fn test_query_overlaps_interval_start() {
         let lapper = setup_nonoverlapping();
-        //let mut cursor = 0;
         let expected = Iv {
             start: 20,
             stop: 30,
             val: 0,
         };
         assert_eq!(Some(&expected), lapper.find(15, 25).next());
-        //assert_eq!(Some(&expected), lapper.seek(15, 25, &mut cursor).next())
     }
 
     // Test that a query that overlaps the end of an interval returns that interval
@@ -441,7 +427,6 @@ mod tests {
             val: 0,
         };
         assert_eq!(Some(&expected), lapper.find(25, 35).next());
-        //assert_eq!(Some(&expected), lapper.seek(25, 35, &mut cursor).next())
     }
 
     // Test that a query that is enveloped by interval returns interval
@@ -455,7 +440,6 @@ mod tests {
             val: 0,
         };
         assert_eq!(Some(&expected), lapper.find(22, 27).next());
-        //assert_eq!(Some(&expected), lapper.seek(22, 27, &mut cursor).next())
     }
 
     // Test that a query that envolops an interval returns that interval
@@ -469,7 +453,6 @@ mod tests {
             val: 0,
         };
         assert_eq!(Some(&expected), lapper.find(15, 35).next());
-        //assert_eq!(Some(&expected), lapper.seek(15, 35, &mut cursor).next())
     }
 
     #[test]
@@ -487,39 +470,21 @@ mod tests {
             val: 0,
         };
         assert_eq!(vec![&e1, &e2], lapper.find(8, 20).collect::<Vec<&Iv>>());
-        //assert_eq!(
-            //vec![&e1, &e2],
-            //lapper.seek(8, 20, &mut cursor).collect::<Vec<&Iv>>()
-        //);
     }
-
-    //#[test]
-    //fn test_merge_overlaps() {
-        //let mut lapper = setup_badlapper();
-        //let expected: Vec<&Iv> = vec![
-            //&Iv{start: 10, end: 16, val: 0},
-            //&Iv{start: 40, end: 45, val: 0},
-            //&Iv{start: 50, end: 55, val: 0},
-            //&Iv{start: 60, end: 65, val: 0},
-            //&Iv{start: 68, end: 120, val: 0}, // max_len = 50
-        //];
-        //lapper.merge_overlaps();
-        //assert_eq!(expected, lapper.iter().collect::<Vec<&Iv>>())
-        
-    //}
-
-    //#[test]
-    //fn test_lapper_cov() {
-        //let mut lapper = setup_badlapper();
-        //let before = lapper.cov();
-        //lapper.merge_overlaps();
-        //let after = lapper.cov();
-        //assert_eq!(before, after);
-
-        //let mut lapper = setup_nonoverlapping();
-        //lapper.set_cov();
-        //assert_eq!(lapper.cov(), 50);
-    //}
+        #[test]
+        fn test_merge_overlaps() {
+            let lapper = setup_badlapper();
+            let expected: Vec<&Iv> = vec![
+                &Iv{start: 10, stop: 16, val: 0},
+                &Iv{start: 40, stop: 45, val: 0},
+                &Iv{start: 50, stop: 55, val: 0},
+                &Iv{start: 60, stop: 65, val: 0},
+                &Iv{start: 68, stop: 120, val: 0}, // max_len = 50
+            ];
+            let new_lapper = lapper.merge_overlaps();
+            assert_eq!(expected, new_lapper.iter().collect::<Vec<&Iv>>());
+            
+        }
 
     #[test]
     fn test_interval_intersects() {
@@ -542,46 +507,6 @@ mod tests {
         assert_eq!(i6.intersect(&i7), 0); // no intersect end = start
         assert_eq!(i1.intersect(&i10), 5); // inner intersect at start
     }
-
-    //#[test]
-    //fn test_union_and_intersect() {
-        //let data1: Vec<Iv> = vec![
-            //Iv{start: 70, end: 120, val: 0}, // max_len = 50
-            //Iv{start: 10, end: 15, val: 0}, // exact overlap
-            //Iv{start: 12, end: 15, val: 0}, // inner overlap
-            //Iv{start: 14, end: 16, val: 0}, // overlap end
-            //Iv{start: 68, end: 71, val: 0}, // overlap start
-        //];
-        //let data2: Vec<Iv> = vec![
-
-            //Iv{start: 10, end: 15, val: 0},
-            //Iv{start: 40, end: 45, val: 0},
-            //Iv{start: 50, end: 55, val: 0},
-            //Iv{start: 60, end: 65, val: 0},
-            //Iv{start: 70, end: 75, val: 0},
-        //];
-        
-        //let (mut lapper1, mut lapper2) = (ScAIList::new_min_cov(data1), ScAIList::new(data2)) ;
-        //// Should be the same either way it's calculated
-        //let (union, intersect) = lapper1.union_and_intersect(&lapper2);
-        //assert_eq!(intersect, 10);
-        //assert_eq!(union, 73);
-        //let (union, intersect) = lapper2.union_and_intersect(&lapper1);
-        //assert_eq!(intersect, 10);
-        //assert_eq!(union, 73);
-        //lapper1.merge_overlaps();
-        //lapper1.set_cov();
-        //lapper2.merge_overlaps();
-        //lapper2.set_cov();
-
-        //// Should be the same either way it's calculated
-        //let (union, intersect) = lapper1.union_and_intersect(&lapper2);
-        //assert_eq!(intersect, 10);
-        //assert_eq!(union, 73);
-        //let (union, intersect) = lapper2.union_and_intersect(&lapper1);
-        //assert_eq!(intersect, 10);
-        //assert_eq!(union, 73);
-    //}
 
     #[test]
     fn test_find_overlaps_in_large_intervals() {
