@@ -1,30 +1,3 @@
-//! This module provides a simple data-structure for fast interval searches.
-//! ## Features
-//! - Extremely fast on most genomic datasets. (3-4x faster than other methods)
-//! - Extremely fast on in order queries. (10x faster than other methods)
-//! - Extremely fast intersections count method based on the
-//! [BITS](https://arxiv.org/pdf/1208.3407.pdf) algorithm
-//! - Parallel friendly. Queries are on an immutable structure, even for seek
-//! - Consumer / Adapter paradigm, Iterators are returned and serve as the main API for interacting
-//! with the lapper
-//!
-//! ## Details:
-//!
-//! ```text
-//!       0  1  2  3  4  5  6  7  8  9  10 11
-//! (0,10]X  X  X  X  X  X  X  X  X  X
-//! (2,5]       X  X  X
-//! (3,8]          X  X  X  X  X
-//! (3,8]          X  X  X  X  X
-//! (3,8]          X  X  X  X  X
-//! (3,8]          X  X  X  X  X
-//! (5,9]                X  X  X  X
-//! (8,11]                        X  X  X
-//!
-//! Query: (8, 11]
-//! Answer: ((0,10], (5,9], (8,11])
-//! ```
-//!
 //! Most interaction with this crate will be through the [`Lapper``](struct.Lapper.html)` struct
 //! The main methods are [`find`](struct.Lapper.html#method.find),
 //! [`seek`](struct.Lapper.html#method.seek), and [`count`](struct.Lapper.html#method.count)
