@@ -49,7 +49,7 @@
 //! # Examples
 //!
 //! ```rust
-//!    use rust_lapper::{Interval, Lapper};
+//!    use ivtools::{Interval, Lapper, IvStore};
 //!    use std::cmp;
 //!    type Iv = Interval<u32>;
 //!
@@ -117,7 +117,7 @@ impl<T> Lapper<T> {
     /// be modified and should be reused in the next query. This allows seek to not need to make
     /// the lapper object mutable, and thus use the same lapper accross threads.
     /// ```
-    /// use rust_lapper::{Lapper, Interval};
+    /// use ivtools::{Lapper, Interval, IvStore};
     /// let lapper = Lapper::new((0..100).step_by(5)
     ///                                 .map(|x| Interval{start: x, stop: x+2 , val: true})
     ///                                 .collect::<Vec<Interval<bool>>>());
@@ -163,7 +163,7 @@ where
     /// Create a new instance of Lapper by passing in a vector of Intervals. This vector will
     /// immediately be sorted by start order.
     /// ```
-    /// use rust_lapper::{Lapper, Interval};
+    /// use ivtools::{Lapper, Interval, IvStore};
     /// let data = (0..20).step_by(5)
     ///                   .map(|x| Interval{start: x, stop: x + 10, val: true})
     ///                   .collect::<Vec<Interval<bool>>>();
@@ -187,7 +187,7 @@ where
 
     /// Get the number over intervals in Lapper
     /// ```
-    /// use rust_lapper::{Lapper, Interval};
+    /// use ivtools::{Lapper, Interval, IvStore};
     /// let data = (0..20).step_by(5)
     ///                   .map(|x| Interval{start: x, stop: x + 10, val: true})
     ///                   .collect::<Vec<Interval<bool>>>();
@@ -201,7 +201,7 @@ where
 
     /// Check if lapper is empty
     /// ```
-    /// use rust_lapper::{Lapper, Interval};
+    /// use ivtools::{Lapper, Interval, IvStore};
     /// let data: Vec<Interval<bool>> = vec![];
     /// let lapper = Lapper::new(data);
     /// assert_eq!(lapper.is_empty(), true);
@@ -265,7 +265,7 @@ where
 
     /// Find all intervals that overlap start .. stop
     /// ```
-    /// use rust_lapper::{Lapper, Interval};
+    /// use ivtools::{Lapper, Interval, IvStore};
     /// let lapper = Lapper::new((0..100).step_by(5)
     ///                                 .map(|x| Interval{start: x, stop: x+2 , val: true})
     ///                                 .collect::<Vec<Interval<bool>>>());

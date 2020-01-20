@@ -41,8 +41,7 @@ impl Bits {
     /// find all the excluded elements, and then deduces the intersection from there. See
     /// [BITS](https://arxiv.org/pdf/1208.3407.pdf) for more details.
     /// ```
-    /// use ivtools::bits::Bits;
-    /// use ivtools::interval::Interval;
+    /// use ivtools::{Bits, Interval};
     /// let bits = Bits::new((0..100).step_by(5)
     ///                                 .map(|x| Interval{start: x, stop: x+2 , val: true})
     ///                                 .collect::<Vec<Interval<bool>>>());

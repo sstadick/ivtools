@@ -1,8 +1,15 @@
-pub mod bits;
-pub mod interval;
-pub mod ivstore;
-pub mod rust_lapper;
-pub mod scailist;
+mod bits;
+mod interval;
+mod ivstore;
+mod rust_lapper;
+mod scailist;
+
+// Rexport to flatten structure
+pub use self::bits::Bits;
+pub use self::interval::Interval;
+pub use self::ivstore::IvStore;
+pub use self::rust_lapper::Lapper;
+pub use self::scailist::ScAIList;
 
 // Test the methods against eachother
 #[cfg(test)]

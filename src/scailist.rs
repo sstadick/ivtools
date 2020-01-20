@@ -29,7 +29,7 @@
 //! # Examples
 //!
 //! ```rust
-//!    use scailist::{Interval, ScAIList};
+//!    use ivtools::{Interval, ScAIList, IvStore};
 //!    use std::cmp;
 //!    type Iv = Interval<u32>;
 //!
@@ -38,7 +38,7 @@
 //!    println!("{:#?}", data);
 //!
 //!    // make lapper structure
-//!    let laps = ScAIList::new(data, None);
+//!    let laps = ScAIList::new(data);
 //!    assert_eq!(laps.find(6, 11).next(), Some(&Iv{start: 5, stop: 7, val: 0}));
 //!    
 //!    let mut sim: u32= 0;
