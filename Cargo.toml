@@ -3,8 +3,21 @@ name = "ivtools"
 version = "0.1.0"
 authors = ["Seth Stadick <sstadick@gmail.com>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT"
+repository = "https://github.com/sstadick/ivtools"
+description = "A fast and easy interval overlap library"
+documentation = "https://docs.rs/ivtools"
+readme = "README.md"
+categories = ["algorithms", "science"]
+keywords = ["tree", "interval", "bioinformatics", "ranges", "genomic"]
 
 [dependencies]
 
+[dev-dependencies]
+criterion = "0.3"
+rand = "0.7"
+cpu-time = "0.1.0"
+
+[[bench]]
+name = "ivstore_benchmarks"
+harness = false
