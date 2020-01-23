@@ -52,14 +52,13 @@
 //!    assert_eq!(sim, 4);
 //! ```
 
-use crate::interval::Interval;
-use crate::ivstore::IvStore;
+use crate::ivstore::{IntervalLike, IvStore};
 use crate::rust_lapper::Lapper;
 
 #[derive(Debug)]
-pub struct ScAIList<T> {
+pub struct ScAIList<T, I: IntervalLike<T>> {
     /// The list of intervals
-    intervals: Vec<Interval<T>>,
+    intervals: Vec<I>,
     // number of comps total
     num_comps: usize,
     // list of lengths of comps
@@ -71,8 +70,8 @@ pub struct ScAIList<T> {
 }
 
 /// The ScAIList itself
-impl<T> ScAIList<T> {
-    fn new_min_cov(mut input_intervals: Vec<Interval<T>>, min_cov_len: Option<usize>) -> Self {
+impl<T, I: IntervalLike<T>> ScAIList<T, I> {
+    fn new_min_cov(mut input_intervals: Vec<I>, min_cov_len: Option<usize>) -> Self {
         let max_comps = (input_intervals.len() as f64).log2().floor() as usize + 1;
         let min_cov_len = min_cov_len.unwrap_or(20); // number of elements ahead to check for cov
         let min_cov = min_cov_len / 2; // the number of elemnts covered to trigger an extraction
@@ -104,7 +103,7 @@ impl<T> ScAIList<T> {
                     let mut j = 1;
                     let mut cov = 1;
                     while j < min_comp_len && cov < min_cov && j + i < input_intervals.len() {
-                        if input_intervals[j + i].as_ref().unwrap().stop >= interval.stop {
+                        if input_intervals[j + i].as_ref().unwrap().stop() >= interval.stop() {
                             cov += 1;
                         }
                         j += 1;
@@ -143,11 +142,11 @@ impl<T> ScAIList<T> {
         for j in 0..num_comps {
             let comp_start = comp_idxs[j];
             let comp_end = comp_start + comp_lens[j];
-            let mut max_end = decomposed[comp_start].as_ref().unwrap().stop;
+            let mut max_end = decomposed[comp_start].as_ref().unwrap().stop();
             max_ends.push(max_end);
             for iv in decomposed[comp_start + 1..comp_end].iter() {
-                if iv.as_ref().unwrap().stop > max_end {
-                    max_end = iv.as_ref().unwrap().stop;
+                if iv.as_ref().unwrap().stop() > max_end {
+                    max_end = iv.as_ref().unwrap().stop();
                 }
                 max_ends.push(max_end);
             }
@@ -163,14 +162,14 @@ impl<T> ScAIList<T> {
     }
     /// Binary search to find the right most index where interval.start < query.stop
     #[inline]
-    pub fn upper_bound(stop: u32, intervals: &[Interval<T>]) -> Option<usize> {
+    pub fn upper_bound(stop: u32, intervals: &[I]) -> Option<usize> {
         let mut right = intervals.len();
         let mut left = 0;
 
-        if intervals[right - 1].start < stop {
+        if intervals[right - 1].start() < stop {
             // last start pos is less than the stop, then return the last pos
             return Some(right - 1);
-        } else if intervals[left].start >= stop {
+        } else if intervals[left].start() >= stop {
             // first start pos > stop, not in this cluster at all
             return None;
         }
@@ -182,10 +181,10 @@ impl<T> ScAIList<T> {
             let other_left = left + other_half;
             let v = &intervals[probe];
             right = half;
-            left = if v.start < stop { other_left } else { left }
+            left = if v.start() < stop { other_left } else { left }
         }
         // Guarded at the top from ending on either extreme
-        if intervals[left].start >= stop {
+        if intervals[left].start() >= stop {
             Some(left - 1)
         } else {
             Some(left)
@@ -193,13 +192,14 @@ impl<T> ScAIList<T> {
     }
 }
 
-impl<'a, T> IvStore<'a, T> for ScAIList<T>
+impl<'a, T, I> IvStore<'a, T, I> for ScAIList<T, I>
 where
     T: 'a,
+    I: IntervalLike<T>,
 {
-    type IvSearchIterator = IterFind<'a, T>;
-    type IvIterator = IterScAIList<'a, T>;
-    type SelfU32 = ScAIList<u32>;
+    type IvSearchIterator = IterFind<'a, T, I>;
+    type IvIterator = IterScAIList<'a, T, I>;
+    type SelfU32 = ScAIList<u32, I>;
 
     /// Create a new ScAIList out of the passed in intervals. The min_cov_len should probably be
     /// left as default, which is 20. It dictates how far ahead to look from a given point to
@@ -207,7 +207,7 @@ where
     /// number of intervals it has to cover is equal to min_cov_len / 2. The number of sublists
     /// that might be fored is capped at intervals.len().log2(), but if there aren't many overlaps,
     /// fewer will be created.
-    fn new(input_intervals: Vec<Interval<T>>) -> Self {
+    fn new(input_intervals: Vec<I>) -> Self {
         ScAIList::new_min_cov(input_intervals, None)
     }
 
@@ -221,11 +221,11 @@ where
         self.intervals.is_empty()
     }
 
-    fn merge_overlaps(self) -> ScAIList<u32> {
-        let lapper = Lapper::new(self.intervals);
-        let lapper: Lapper<u32> = lapper.merge_overlaps();
-        let intervals: Vec<Interval<u32>> = lapper.into_iter().collect();
-        let scailist: ScAIList<u32> = ScAIList::new(intervals);
+    fn merge_overlaps<J: IntervalLike<u32>>(self) -> ScAIList<u32, J> {
+        let lapper: Lapper<T, I> = Lapper::new(self.intervals);
+        let lapper: Lapper<u32, J> = lapper.merge_overlaps();
+        let intervals: Vec<J> = lapper.into_iter().collect();
+        let scailist: ScAIList<u32, J> = ScAIList::new(intervals);
         return scailist;
     }
 

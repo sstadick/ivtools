@@ -1,3 +1,4 @@
+use crate::ivstore::IntervalLike;
 use std::cmp::Ordering::{self};
 
 /// Represent a range from [start, stop)
@@ -9,10 +10,10 @@ pub struct Interval<T> {
     pub val: T,
 }
 
-impl<T> Interval<T> {
+impl<T> IntervalLike<T> for Interval<T> {
     /// Compute the intsect between two intervals
     #[inline]
-    pub fn intersect(&self, other: &Interval<T>) -> u32 {
+    fn intersect(&self, other: &Interval<T>) -> u32 {
         std::cmp::min(self.stop, other.stop)
             .checked_sub(std::cmp::max(self.start, other.start))
             .unwrap_or(0)
@@ -20,8 +21,38 @@ impl<T> Interval<T> {
 
     /// Check if two intervals overlap
     #[inline]
-    pub fn overlap(&self, start: u32, stop: u32) -> bool {
+    fn overlap(&self, start: u32, stop: u32) -> bool {
         self.start < stop && self.stop > start
+    }
+
+    #[inline]
+    fn start(&self) -> u32 {
+        self.start
+    }
+
+    #[inline]
+    fn stop(&self) -> u32 {
+        self.stop
+    }
+
+    #[inline]
+    fn val(&self) -> &T {
+        &self.val
+    }
+
+    #[inline]
+    fn set_start(&mut self, new: u32) {
+        self.start = new;
+    }
+
+    #[inline]
+    fn set_stop(&mut self, new: u32) {
+        self.stop = new;
+    }
+
+    #[inline]
+    fn set_val(&mut self, new: T) {
+        self.val = new;
     }
 }
 

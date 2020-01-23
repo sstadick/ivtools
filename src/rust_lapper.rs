@@ -48,27 +48,32 @@
 //!    }
 //!    assert_eq!(sim, 4);
 //! ```
-use crate::interval::Interval;
-use crate::ivstore::IvStore;
+use crate::ivstore::{IntervalLike, IvStore};
 use std::collections::VecDeque;
 
 /// Primary object of the library. The public intervals holds all the intervals and can be used for
 /// iterating / pulling values out of the tree.
 #[derive(Debug)]
-pub struct Lapper<T> {
+pub struct Lapper<T, I>
+where
+    I: IntervalLike<T>,
+{
     /// List of intervasl
-    pub intervals: Vec<Interval<T>>,
+    pub intervals: Vec<I>,
     /// The length of the longest interval
     max_len: u32,
     /// A cursor to hold the position in the list in between searches with `seek` method
     cursor: usize,
 }
 
-impl<T> Lapper<T> {
+impl<T, I> Lapper<T, I>
+where
+    I: IntervalLike<T>,
+{
     /// Determine the first index that we should start checking for overlaps for via a binary
     /// search.
     #[inline]
-    pub fn lower_bound(start: u32, intervals: &[Interval<T>]) -> usize {
+    pub fn lower_bound(start: u32, intervals: &[I]) -> usize {
         let mut size = intervals.len();
         let mut low = 0;
 
@@ -79,7 +84,7 @@ impl<T> Lapper<T> {
             let other_low = low + other_half;
             let v = &intervals[probe];
             size = half;
-            low = if v.start < start { other_low } else { low }
+            low = if v.start() < start { other_low } else { low }
         }
         low
     }
@@ -100,8 +105,9 @@ impl<T> Lapper<T> {
     /// }
     /// ```
     #[inline]
-    pub fn seek<'a>(&'a self, start: u32, stop: u32, cursor: &mut usize) -> IterFind<'a, T> {
-        if *cursor == 0 || (*cursor < self.intervals.len() && self.intervals[*cursor].start > start)
+    pub fn seek<'a>(&'a self, start: u32, stop: u32, cursor: &mut usize) -> IterFind<'a, T, I> {
+        if *cursor == 0
+            || (*cursor < self.intervals.len() && self.intervals[*cursor].start() > start)
         {
             *cursor = Self::lower_bound(
                 start.checked_sub(self.max_len).unwrap_or(0),
@@ -110,7 +116,7 @@ impl<T> Lapper<T> {
         }
 
         while *cursor + 1 < self.intervals.len()
-            && self.intervals[*cursor + 1].start < start.checked_sub(self.max_len).unwrap_or(0)
+            && self.intervals[*cursor + 1].start() < start.checked_sub(self.max_len).unwrap_or(0)
         {
             *cursor += 1;
         }
@@ -125,13 +131,14 @@ impl<T> Lapper<T> {
     }
 }
 
-impl<'a, T> IvStore<'a, T> for Lapper<T>
+impl<'a, T, I> IvStore<'a, T, I> for Lapper<T, I>
 where
     T: 'a,
+    I: IntervalLike<T>,
 {
-    type IvSearchIterator = IterFind<'a, T>;
-    type IvIterator = IterLapper<'a, T>;
-    type SelfU32 = Lapper<u32>;
+    type IvSearchIterator = IterFind<'a, T, I>;
+    type IvIterator = IterLapper<'a, T, I>;
+    type SelfU32 = Lapper<u32, I>;
 
     /// Create a new instance of Lapper by passing in a vector of Intervals. This vector will
     /// immediately be sorted by start order.
@@ -142,11 +149,11 @@ where
     ///                   .collect::<Vec<Interval<bool>>>();
     /// let lapper = Lapper::new(data);
     /// ```
-    fn new(mut intervals: Vec<Interval<T>>) -> Self {
+    fn new(mut intervals: Vec<I>) -> Self {
         intervals.sort();
         let mut max_len = 0;
         for interval in intervals.iter() {
-            let i_len = interval.stop.checked_sub(interval.start).unwrap_or(0);
+            let i_len = interval.stop().checked_sub(interval.start()).unwrap_or(0);
             if i_len > max_len {
                 max_len = i_len;
             }
@@ -186,7 +193,7 @@ where
 
     /// Return an iterator over the intervals in Lapper
     #[inline]
-    fn iter(&self) -> IterLapper<T> {
+    fn iter(&self) -> IterLapper<T, I> {
         IterLapper {
             inner: self,
             pos: 0,
@@ -195,18 +202,18 @@ where
 
     /// Merge any intervals that overlap with eachother within the Lapper. This is an easy way to
     /// speed up queries. It returns a new lapper
-    fn merge_overlaps(mut self) -> Lapper<u32> {
-        let mut stack: VecDeque<&mut Interval<T>> = VecDeque::new();
+    fn merge_overlaps<J: IntervalLike<u32>>(mut self) -> Lapper<u32, J> {
+        let mut stack: VecDeque<&mut I> = VecDeque::new();
         let mut ivs = self.intervals.iter_mut();
-        let intervals: Vec<Interval<u32>> = if let Some(first) = ivs.next() {
+        let intervals: Vec<J> = if let Some(first) = ivs.next() {
             stack.push_back(first);
             for interval in ivs {
                 let mut top = stack.pop_back().unwrap();
-                if top.stop < interval.start {
+                if top.stop() < interval.start() {
                     stack.push_back(top);
                     stack.push_back(interval);
-                } else if top.stop < interval.stop {
-                    top.stop = interval.stop;
+                } else if top.stop() < interval.stop() {
+                    top.set_stop(interval.stop());
                     //stack.pop_back();
                     stack.push_back(top);
                 } else {
@@ -216,12 +223,7 @@ where
             }
             stack
                 .into_iter()
-                .map(|x| Interval {
-                    start: x.start,
-                    stop: x.stop,
-                    // val: x.val.clone(),
-                    val: 0,
-                })
+                .map(|x| J::new(x.start(), x.stop(), 0))
                 .collect()
         } else {
             vec![]
@@ -245,7 +247,7 @@ where
     /// assert_eq!(lapper.find(5, 11).count(), 2);
     /// ```
     #[inline]
-    fn find(&self, start: u32, stop: u32) -> IterFind<T> {
+    fn find(&self, start: u32, stop: u32) -> IterFind<T, I> {
         IterFind {
             inner: self,
             off: Self::lower_bound(
@@ -261,19 +263,23 @@ where
 
 /// Find Iterator
 #[derive(Debug)]
-pub struct IterFind<'a, T>
+pub struct IterFind<'a, T, I>
 where
     T: 'a,
+    I: IntervalLike<T>,
 {
-    inner: &'a Lapper<T>,
+    inner: &'a Lapper<T, I>,
     off: usize,
     end: usize,
     start: u32,
     stop: u32,
 }
 
-impl<'a, T> Iterator for IterFind<'a, T> {
-    type Item = &'a Interval<T>;
+impl<'a, T, I> Iterator for IterFind<'a, T, I>
+where
+    I: IntervalLike<T>,
+{
+    type Item = &'a I;
 
     #[inline]
     // interval.start < stop && interval.stop > start
@@ -285,7 +291,7 @@ impl<'a, T> Iterator for IterFind<'a, T> {
             self.off += 1;
             if interval.overlap(self.start, self.stop) {
                 return Some(interval);
-            } else if interval.start >= self.stop {
+            } else if interval.start() >= self.stop {
                 break;
             }
         }
@@ -294,16 +300,17 @@ impl<'a, T> Iterator for IterFind<'a, T> {
 }
 
 /// Lapper Iterator
-pub struct IterLapper<'a, T>
+pub struct IterLapper<'a, T, I>
 where
     T: 'a,
+    I: IntervalLike<T>,
 {
-    inner: &'a Lapper<T>,
+    inner: &'a Lapper<T, I>,
     pos: usize,
 }
 
-impl<'a, T> Iterator for IterLapper<'a, T> {
-    type Item = &'a Interval<T>;
+impl<'a, T, I> Iterator for IterLapper<'a, T, I> {
+    type Item = &'a I;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.pos >= self.inner.intervals.len() {
@@ -315,8 +322,11 @@ impl<'a, T> Iterator for IterLapper<'a, T> {
     }
 }
 
-impl<T> IntoIterator for Lapper<T> {
-    type Item = Interval<T>;
+impl<T, I> IntoIterator for Lapper<T, I>
+where
+    I: IntervalLike<T>,
+{
+    type Item = I;
     type IntoIter = ::std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -324,20 +334,26 @@ impl<T> IntoIterator for Lapper<T> {
     }
 }
 
-impl<'a, T> IntoIterator for &'a Lapper<T> {
-    type Item = &'a Interval<T>;
-    type IntoIter = std::slice::Iter<'a, Interval<T>>;
+impl<'a, T, I> IntoIterator for &'a Lapper<T, I>
+where
+    I: IntervalLike<T>,
+{
+    type Item = &'a I;
+    type IntoIter = std::slice::Iter<'a, I>;
 
-    fn into_iter(self) -> std::slice::Iter<'a, Interval<T>> {
+    fn into_iter(self) -> std::slice::Iter<'a, I> {
         self.intervals.iter()
     }
 }
 
-impl<'a, T> IntoIterator for &'a mut Lapper<T> {
-    type Item = &'a mut Interval<T>;
-    type IntoIter = std::slice::IterMut<'a, Interval<T>>;
+impl<'a, T, I> IntoIterator for &'a mut Lapper<T, I>
+where
+    I: IntervalLike<T>,
+{
+    type Item = &'a mut I;
+    type IntoIter = std::slice::IterMut<'a, I>;
 
-    fn into_iter(self) -> std::slice::IterMut<'a, Interval<T>> {
+    fn into_iter(self) -> std::slice::IterMut<'a, I> {
         self.intervals.iter_mut()
     }
 }
@@ -348,6 +364,7 @@ mod tests {
     use super::*;
 
     type Iv = Interval<u32>;
+    type Lapper<T> = crate::rust_lapper::Lapper<T, Interval<T>>;
     fn setup_nonoverlapping() -> Lapper<u32> {
         let data: Vec<Iv> = (0..100)
             .step_by(20)
