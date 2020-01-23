@@ -1,18 +1,17 @@
 pub trait IvStore<'a, T, I>
 where
-    T: 'a,
-    I: IntervalLike<T>,
+    T: 'a + Default,
+    I: IntervalLike<T> + 'a,
 {
     type IvIterator: Iterator<Item = &'a I>;
     type IvSearchIterator: Iterator<Item = &'a I>;
-    type SelfU32: IvStore<'a, u32, I>;
 
     // functions that must be implemented
     fn new(intervals: Vec<I>) -> Self;
     fn len(&'a self) -> usize;
     fn is_empty(&'a self) -> bool;
     fn iter(&'a self) -> Self::IvIterator;
-    fn merge_overlaps(self) -> Self::SelfU32;
+    fn merge_overlaps(self) -> Self;
     fn find(&'a self, start: u32, stop: u32) -> Self::IvSearchIterator;
     // fn depth(&'a self) -> Self::IvIterator;
     // fn coverage(&'a self) -> u32;
@@ -20,7 +19,7 @@ where
     // fn union(&'a self, other: &Self) -> u32;
 }
 
-pub trait IntervalLike<T>: Ord + Eq + PartialEq + PartialOrd {
+pub trait IntervalLike<T: Default>: Ord + Eq + PartialEq + PartialOrd {
     fn new(start: u32, stop: u32, val: T) -> Self;
     fn intersect(&self, other: &Self) -> u32 {
         std::cmp::min(self.stop(), other.stop())

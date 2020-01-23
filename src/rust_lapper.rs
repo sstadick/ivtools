@@ -50,12 +50,14 @@
 //! ```
 use crate::ivstore::{IntervalLike, IvStore};
 use std::collections::VecDeque;
+use std::marker::PhantomData;
 
 /// Primary object of the library. The public intervals holds all the intervals and can be used for
 /// iterating / pulling values out of the tree.
 #[derive(Debug)]
 pub struct Lapper<T, I>
 where
+    T: Default,
     I: IntervalLike<T>,
 {
     /// List of intervasl
@@ -64,10 +66,12 @@ where
     max_len: u32,
     /// A cursor to hold the position in the list in between searches with `seek` method
     cursor: usize,
+    phantom_type: PhantomData<T>,
 }
 
 impl<T, I> Lapper<T, I>
 where
+    T: Default,
     I: IntervalLike<T>,
 {
     /// Determine the first index that we should start checking for overlaps for via a binary
@@ -127,18 +131,18 @@ where
             end: self.intervals.len(),
             start,
             stop,
+            phantom_type: PhantomData,
         }
     }
 }
 
 impl<'a, T, I> IvStore<'a, T, I> for Lapper<T, I>
 where
-    T: 'a,
-    I: IntervalLike<T>,
+    T: 'a + Default,
+    I: IntervalLike<T> + 'a,
 {
     type IvSearchIterator = IterFind<'a, T, I>;
     type IvIterator = IterLapper<'a, T, I>;
-    type SelfU32 = Lapper<u32, I>;
 
     /// Create a new instance of Lapper by passing in a vector of Intervals. This vector will
     /// immediately be sorted by start order.
@@ -162,6 +166,7 @@ where
             intervals,
             max_len,
             cursor: 0,
+            phantom_type: PhantomData,
         }
     }
 
@@ -197,18 +202,19 @@ where
         IterLapper {
             inner: self,
             pos: 0,
+            phantom_type: PhantomData,
         }
     }
 
     /// Merge any intervals that overlap with eachother within the Lapper. This is an easy way to
     /// speed up queries. It returns a new lapper
-    fn merge_overlaps<J: IntervalLike<u32>>(mut self) -> Lapper<u32, J> {
+    fn merge_overlaps(mut self) -> Self {
         let mut stack: VecDeque<&mut I> = VecDeque::new();
         let mut ivs = self.intervals.iter_mut();
-        let intervals: Vec<J> = if let Some(first) = ivs.next() {
+        let intervals = if let Some(first) = ivs.next() {
             stack.push_back(first);
             for interval in ivs {
-                let mut top = stack.pop_back().unwrap();
+                let top = stack.pop_back().unwrap();
                 if top.stop() < interval.start() {
                     stack.push_back(top);
                     stack.push_back(interval);
@@ -223,7 +229,7 @@ where
             }
             stack
                 .into_iter()
-                .map(|x| J::new(x.start(), x.stop(), 0))
+                .map(|x| I::new(x.start(), x.stop(), Default::default()))
                 .collect()
         } else {
             vec![]
@@ -257,6 +263,7 @@ where
             end: self.intervals.len(),
             start,
             stop,
+            phantom_type: PhantomData,
         }
     }
 }
@@ -265,7 +272,7 @@ where
 #[derive(Debug)]
 pub struct IterFind<'a, T, I>
 where
-    T: 'a,
+    T: 'a + Default,
     I: IntervalLike<T>,
 {
     inner: &'a Lapper<T, I>,
@@ -273,10 +280,12 @@ where
     end: usize,
     start: u32,
     stop: u32,
+    phantom_type: PhantomData<T>,
 }
 
 impl<'a, T, I> Iterator for IterFind<'a, T, I>
 where
+    T: Default,
     I: IntervalLike<T>,
 {
     type Item = &'a I;
@@ -302,14 +311,15 @@ where
 /// Lapper Iterator
 pub struct IterLapper<'a, T, I>
 where
-    T: 'a,
+    T: 'a + Default,
     I: IntervalLike<T>,
 {
     inner: &'a Lapper<T, I>,
     pos: usize,
+    phantom_type: PhantomData<T>,
 }
 
-impl<'a, T, I> Iterator for IterLapper<'a, T, I> {
+impl<'a, T: Default, I: IntervalLike<T>> Iterator for IterLapper<'a, T, I> {
     type Item = &'a I;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -324,6 +334,7 @@ impl<'a, T, I> Iterator for IterLapper<'a, T, I> {
 
 impl<T, I> IntoIterator for Lapper<T, I>
 where
+    T: Default,
     I: IntervalLike<T>,
 {
     type Item = I;
@@ -336,6 +347,7 @@ where
 
 impl<'a, T, I> IntoIterator for &'a Lapper<T, I>
 where
+    T: Default,
     I: IntervalLike<T>,
 {
     type Item = &'a I;
@@ -348,6 +360,7 @@ where
 
 impl<'a, T, I> IntoIterator for &'a mut Lapper<T, I>
 where
+    T: Default,
     I: IntervalLike<T>,
 {
     type Item = &'a mut I;
@@ -362,7 +375,7 @@ where
 #[rustfmt::skip]
 mod tests {
     use super::*;
-
+    use crate::interval::Interval;
     type Iv = Interval<u32>;
     type Lapper<T> = crate::rust_lapper::Lapper<T, Interval<T>>;
     fn setup_nonoverlapping() -> Lapper<u32> {

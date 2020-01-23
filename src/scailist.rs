@@ -54,9 +54,14 @@
 
 use crate::ivstore::{IntervalLike, IvStore};
 use crate::rust_lapper::Lapper;
+use std::marker::PhantomData;
 
 #[derive(Debug)]
-pub struct ScAIList<T, I: IntervalLike<T>> {
+pub struct ScAIList<T, I>
+where
+    T: Default,
+    I: IntervalLike<T>,
+{
     /// The list of intervals
     intervals: Vec<I>,
     // number of comps total
@@ -67,10 +72,15 @@ pub struct ScAIList<T, I: IntervalLike<T>> {
     comp_idxs: Vec<usize>,
     // vec of max ends, pairs with intervals
     max_ends: Vec<u32>,
+    phantom_type: PhantomData<T>,
 }
 
 /// The ScAIList itself
-impl<T, I: IntervalLike<T>> ScAIList<T, I> {
+impl<T, I> ScAIList<T, I>
+where
+    T: Default,
+    I: IntervalLike<T>,
+{
     fn new_min_cov(mut input_intervals: Vec<I>, min_cov_len: Option<usize>) -> Self {
         let max_comps = (input_intervals.len() as f64).log2().floor() as usize + 1;
         let min_cov_len = min_cov_len.unwrap_or(20); // number of elements ahead to check for cov
@@ -158,6 +168,7 @@ impl<T, I: IntervalLike<T>> ScAIList<T, I> {
             comp_lens,
             max_ends,
             intervals: decomposed.into_iter().map(|x| x.unwrap()).collect(),
+            phantom_type: PhantomData,
         }
     }
     /// Binary search to find the right most index where interval.start < query.stop
@@ -194,12 +205,11 @@ impl<T, I: IntervalLike<T>> ScAIList<T, I> {
 
 impl<'a, T, I> IvStore<'a, T, I> for ScAIList<T, I>
 where
-    T: 'a,
-    I: IntervalLike<T>,
+    T: 'a + Default,
+    I: IntervalLike<T> + 'a,
 {
     type IvSearchIterator = IterFind<'a, T, I>;
     type IvIterator = IterScAIList<'a, T, I>;
-    type SelfU32 = ScAIList<u32, I>;
 
     /// Create a new ScAIList out of the passed in intervals. The min_cov_len should probably be
     /// left as default, which is 20. It dictates how far ahead to look from a given point to
@@ -221,16 +231,16 @@ where
         self.intervals.is_empty()
     }
 
-    fn merge_overlaps<J: IntervalLike<u32>>(self) -> ScAIList<u32, J> {
+    fn merge_overlaps(self) -> Self {
         let lapper: Lapper<T, I> = Lapper::new(self.intervals);
-        let lapper: Lapper<u32, J> = lapper.merge_overlaps();
-        let intervals: Vec<J> = lapper.into_iter().collect();
-        let scailist: ScAIList<u32, J> = ScAIList::new(intervals);
+        let lapper = lapper.merge_overlaps();
+        let intervals = lapper.into_iter().collect();
+        let scailist = ScAIList::new(intervals);
         return scailist;
     }
 
     #[inline]
-    fn iter(&self) -> IterScAIList<T> {
+    fn iter(&self) -> IterScAIList<T, I> {
         IterScAIList {
             inner: self,
             pos: 0,
@@ -239,7 +249,7 @@ where
 
     #[inline]
     // TODO: Add seek... multiple cursors? how would that work?
-    fn find(&self, start: u32, stop: u32) -> IterFind<T> {
+    fn find(&self, start: u32, stop: u32) -> IterFind<T, I> {
         IterFind {
             comp_num: 0,
             offset: 0,
@@ -254,8 +264,12 @@ where
 
 /// Find Iterator
 #[derive(Debug)]
-pub struct IterFind<'a, T> {
-    inner: &'a ScAIList<T>,
+pub struct IterFind<'a, T, I>
+where
+    T: Default,
+    I: IntervalLike<T>,
+{
+    inner: &'a ScAIList<T, I>,
     offset: usize,
     comp_num: usize,
     stop: u32,
@@ -264,8 +278,12 @@ pub struct IterFind<'a, T> {
     breaknow: bool,
 }
 
-impl<'a, T> Iterator for IterFind<'a, T> {
-    type Item = &'a Interval<T>;
+impl<'a, T, I> Iterator for IterFind<'a, T, I>
+where
+    T: Default,
+    I: IntervalLike<T>,
+{
+    type Item = &'a I;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -300,7 +318,7 @@ impl<'a, T> Iterator for IterFind<'a, T> {
                             0
                         }
                     };
-                    if interval.stop > self.start {
+                    if interval.stop() > self.start {
                         return Some(interval);
                     }
                 }
@@ -308,7 +326,7 @@ impl<'a, T> Iterator for IterFind<'a, T> {
                 while self.offset < comp_end {
                     let interval = &self.inner.intervals[self.offset];
                     self.offset += 1;
-                    if interval.start < self.stop && interval.stop > self.start {
+                    if interval.start() < self.stop && interval.stop() > self.start {
                         return Some(interval);
                     }
                 }
@@ -320,18 +338,22 @@ impl<'a, T> Iterator for IterFind<'a, T> {
         None
     }
 }
-
 /// ScAIList Iterator
-pub struct IterScAIList<'a, T>
+pub struct IterScAIList<'a, T, I>
 where
-    T: 'a,
+    T: 'a + Default,
+    I: IntervalLike<T>,
 {
-    inner: &'a ScAIList<T>,
+    inner: &'a ScAIList<T, I>,
     pos: usize,
 }
 
-impl<'a, T> Iterator for IterScAIList<'a, T> {
-    type Item = &'a Interval<T>;
+impl<'a, T, I> Iterator for IterScAIList<'a, T, I>
+where
+    T: Default,
+    I: IntervalLike<T>,
+{
+    type Item = &'a I;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.pos >= self.inner.intervals.len() {
@@ -347,8 +369,9 @@ impl<'a, T> Iterator for IterScAIList<'a, T> {
 #[rustfmt::skip]
 mod tests {
     use super::*;
-
+    use crate::interval::Interval;
     type Iv = Interval<u32>;
+    type ScAIList<T> = crate::scailist::ScAIList<T, Interval<T>>;
     fn setup_nonoverlapping() -> ScAIList<u32> {
         let data: Vec<Iv> = (0..100)
             .step_by(20)
