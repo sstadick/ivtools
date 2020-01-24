@@ -39,8 +39,13 @@ class Lapper {
 public:
   std::vector<Interval> intervals;
   int max_len;
+  int8_sim_t *lapper_starts;
+  int8_sim_t *lapper_stops;
+  int lapper_total_vecs;
+  const int elem_per_vec = 8;
 
   Lapper(std::vector<Interval> ivs) {
+    // Sort and set the intervals
     std::sort(ivs.begin(), ivs.end(), &iv_sorter);
     int max_len = 0;
     for (auto const &iv : ivs) {
@@ -48,15 +53,9 @@ public:
       max_len = len > max_len ? len : max_len;
     }
     intervals = ivs;
-  }
 
-  std::vector<std::shared_ptr<Interval>> find(const int f_start,
-                                              const int f_stop) {
-    int offset = lower_bound(f_start);
-    std::vector<std::shared_ptr<Interval>> result;
-
+    // Generate and fill the starts and stops
     // calculate the vec sizes
-    constexpr int elem_per_vec = 8;
     int raw_vecs = intervals.size() / elem_per_vec;
     int mod = intervals.size() % elem_per_vec;
     int total_vecs = raw_vecs + (mod > 0 ? 1 : 0);
@@ -80,22 +79,41 @@ public:
         }
       }
     }
+    lapper_total_vecs = total_vecs;
+    lapper_starts = starts;
+    lapper_stops = stops;
+  }
+
+  ~Lapper() {
+    std::free(lapper_starts);
+    std::free(lapper_stops);
+  }
+
+  std::vector<std::shared_ptr<Interval>> find(const int f_start,
+                                              const int f_stop) {
+    int moded_start = f_start - max_len;
+    int offset = lower_bound(moded_start > 0 ? moded_start : 0);
+    std::vector<std::shared_ptr<Interval>> result;
 
     // search
     // Do a lower bounds search first, then start at the nearest full vector
     std::cerr << "Offset is: " << offset << std::endl;
     std::cerr << "Vec to start at is: " << offset / elem_per_vec << std::endl;
-    for (int i = offset / elem_per_vec; i < total_vecs; ++i) {
+    bool break_early = false;
+    for (int i = offset / elem_per_vec; i < lapper_total_vecs; ++i) {
       std::cerr << "i is: " << i << std::endl;
-      int8_sim_t s_starts = starts[i];
-      int8_sim_t s_stops = stops[i];
+      int8_sim_t s_starts = lapper_starts[i];
+      int8_sim_t s_stops = lapper_stops[i];
 
       // q(11, 15) vs i(10, 12)
 
       int8_sim_t start_v_stop = s_starts < f_stop; // 10 < 15 -> true
       int8_sim_t stop_v_start = s_stops > f_start; // 12 > 11 -> true
 
-      int8_sim_t start_and_stop = start_v_stop && stop_v_start;
+      int8_sim_t start_and_stop =
+          start_v_stop && stop_v_start; // any both true are overlaps
+      int8_sim_t start_gte_stop =
+          s_starts >= f_stop; // check for break condition
 
       for (int b = 0; b < elem_per_vec; ++b) {
         std::cerr << b << " (" << s_starts[b] << ", " << s_stops[b] << ") -> "
@@ -107,11 +125,15 @@ public:
           result.push_back(
               std::make_shared<Interval>(intervals[i * elem_per_vec + j]));
         }
+        if (start_gte_stop[j]) {
+          break_early = true;
+          break;
+        }
+      }
+      if (break_early) {
+        break;
       }
     }
-
-    std::free(starts);
-    std::free(stops);
     return result;
   }
 
@@ -135,18 +157,18 @@ private:
 
 int main() {
   std::vector<Interval> ivs = {
-      Interval{start : 0, stop : 5, val : 1},
-      Interval{start : 1, stop : 5, val : 2},
-      Interval{start : 4, stop : 5, val : 2},
-      Interval{start : 5, stop : 9, val : 4},
-      Interval{start : 0, stop : 9, val : 5},
-      Interval{start : 0, stop : 5, val : 6},
-      Interval{start : 0, stop : 5, val : 7},
-      Interval{start : 0, stop : 2, val : 8},
-      Interval{start : 0, stop : 8, val : 9},
-      Interval{start : 1, stop : 9, val : 10},
-      Interval{start : 3, stop : 5, val : 11},
-      Interval{start : 10, stop : 12, val : 12},
+      Interval{.start = 0, .stop = 5, .val = 1},
+      Interval{.start = 1, .stop = 5, .val = 2},
+      Interval{.start = 4, .stop = 5, .val = 2},
+      Interval{.start = 5, .stop = 9, .val = 4},
+      Interval{.start = 0, .stop = 9, .val = 5},
+      Interval{.start = 0, .stop = 5, .val = 6},
+      Interval{.start = 0, .stop = 5, .val = 7},
+      Interval{.start = 0, .stop = 2, .val = 8},
+      Interval{.start = 0, .stop = 8, .val = 9},
+      Interval{.start = 1, .stop = 9, .val = 10},
+      Interval{.start = 3, .stop = 5, .val = 11},
+      Interval{.start = 10, .stop = 12, .val = 12},
   };
   Lapper lapper(ivs);
   auto found = lapper.find(11, 15);
