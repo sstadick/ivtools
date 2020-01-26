@@ -12,6 +12,7 @@ categories = ["algorithms", "science"]
 keywords = ["tree", "interval", "bioinformatics", "ranges", "genomic"]
 
 [dependencies]
+packed_simd = "0.3.3"
 
 [dev-dependencies]
 criterion = "0.3"

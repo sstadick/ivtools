@@ -64,13 +64,13 @@ where
 {
     /// The list of intervals
     intervals: Vec<I>,
-    // number of comps total
+    /// number of comps total
     num_comps: usize,
-    // list of lengths of comps
+    /// list of lengths of comps
     comp_lens: Vec<usize>,
-    // start index's of comps
+    /// start index's of comps
     comp_idxs: Vec<usize>,
-    // vec of max ends, pairs with intervals
+    /// vec of max ends, pairs with intervals
     max_ends: Vec<u32>,
     phantom_type: PhantomData<T>,
 }
@@ -95,7 +95,8 @@ where
 
         let input_len = input_intervals.len();
         input_intervals.sort();
-        let mut input_intervals = input_intervals.into_iter().map(|x| Some(x)).collect();
+        let mut input_intervals: Vec<Option<I>> =
+            input_intervals.into_iter().map(|x| Some(x)).collect();
 
         let mut decomposed = vec![];
         if input_len <= min_comp_len {
@@ -200,6 +201,21 @@ where
         } else {
             Some(left)
         }
+    }
+
+    pub fn simple_find(&self, start: u32, stop: u32) -> Vec<&I> {
+        let mut result = vec![];
+        for i in 0..self.num_comps {
+            for j in self.comp_idxs[i]..self.comp_lens[i] {
+                let interval = &self.intervals[j];
+                if interval.overlap(start, stop) {
+                    result.push(interval);
+                } else if interval.start() >= stop {
+                    break;
+                }
+            }
+        }
+        result
     }
 }
 
@@ -418,6 +434,8 @@ mod tests {
     fn test_query_end_interval_start() {
         let lapper = setup_nonoverlapping();
         assert_eq!(None, lapper.find(15, 20).next());
+        let expected: Vec<&Iv> = vec![];
+        assert_eq!(expected, lapper.simple_find(15, 20));
     }
 
     // Test that a query start that hits an interval end returns no interval
@@ -425,6 +443,8 @@ mod tests {
     fn test_query_start_interval_end() {
         let lapper = setup_nonoverlapping();
         assert_eq!(None, lapper.find(30, 35).next());
+        let expected: Vec<&Iv> = vec![];
+        assert_eq!(expected, lapper.simple_find(30, 35));
     }
 
     // Test that a query that overlaps the start of an interval returns that interval
@@ -437,6 +457,7 @@ mod tests {
             val: 0,
         };
         assert_eq!(Some(&expected), lapper.find(15, 25).next());
+        assert_eq!(&expected, lapper.simple_find(15, 25)[0]); 
     }
 
     // Test that a query that overlaps the end of an interval returns that interval
@@ -673,7 +694,7 @@ mod tests {
     }
 
     // When there is a very long interval that spans many little intervals, test that the little
-    // intevals still get returne properly
+    // intevals still get returned properly
     #[test]
     fn test_bad_skips() {
         let data = vec![
@@ -690,7 +711,11 @@ mod tests {
         let found = lapper.find(28974798, 33141355).collect::<Vec<&Iv>>();
         assert_eq!(found, vec![
             &Iv{start:28866309, stop: 33141404	, val: 0},
-        ])
+        ]);
+        let found2 = lapper.simple_find(28974798, 33141355);
+        assert_eq!(found2,vec![
+            &Iv{start:28866309, stop: 33141404	, val: 0},
+        ]);
 
     }
 }

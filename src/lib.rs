@@ -32,6 +32,7 @@ mod interval;
 mod ivstore;
 mod rust_lapper;
 mod scailist;
+// mod utils;
 
 // Rexport to flatten structure
 pub use self::bits::Bits;
@@ -39,6 +40,7 @@ pub use self::interval::Interval;
 pub use self::ivstore::{IntervalLike, IvStore};
 pub use self::rust_lapper::Lapper;
 pub use self::scailist::ScAIList;
+// use self::utils;
 
 // Test the methods against eachother
 #[cfg(test)]
