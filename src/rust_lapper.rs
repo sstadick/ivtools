@@ -49,11 +49,8 @@
 //!    assert_eq!(sim, 4);
 //! ```
 use crate::ivstore::{IntervalLike, IvStore};
-use packed_simd::u32x8;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
-
-const ELEM_PER_VEC: usize = 8;
 
 /// Primary object of the library. The public intervals holds all the intervals and can be used for
 /// iterating / pulling values out of the tree.
@@ -75,11 +72,11 @@ where
     index: Vec<Cluster>,
     cursor: usize,
     phantom_type: PhantomData<T>,
-    total_vecs: usize,
-    starts: Vec<u32x8>,
-    stops: Vec<u32x8>,
-    max_lens: Vec<u32>,
-    max_ends: Vec<u32>,
+    // total_vecs: usize,
+    // starts: Vec<u32x8>,
+    // stops: Vec<u32x8>,
+    // max_lens: Vec<u32>,
+    // max_ends: Vec<u32>,
 }
 
 /// Index of my intervals, kind of like a van emde boas concept of a cluster
@@ -120,60 +117,6 @@ where
         }
         low
     }
-    /// Determine the first index that we should start checking for overlaps for via a binary
-    /// search.
-    #[inline]
-    pub fn lower_bound_flat(start: u32, starts: &[u32x8]) -> usize {
-        let mut size = starts.len();
-        let mut low = 0;
-        let vec_index = ELEM_PER_VEC - 1;
-        // let start = u32x8::splat(start);
-
-        while size > 0 {
-            let half = size / 2;
-            let other_half = size - half;
-            let probe = low + half;
-            let other_low = low + other_half;
-            let v = &starts[probe];
-            size = half;
-            low = if v.extract(vec_index) < start {
-                other_low
-            } else {
-                low
-            }
-        }
-        low
-    }
-    /// Binary search to find the right most index where interval.start < query.stop
-    #[inline]
-    pub fn upper_bound(stop: u32, intervals: &[I]) -> Option<usize> {
-        let mut right = intervals.len();
-        let mut left = 0;
-
-        if intervals[right - 1].start() < stop {
-            // last start pos is less than the stop, then return the last pos
-            return Some(right - 1);
-        } else if intervals[left].start() >= stop {
-            // first start pos > stop, not in this cluster at all
-            return None;
-        }
-
-        while right > 0 {
-            let half = right / 2;
-            let other_half = right - half;
-            let probe = left + half;
-            let other_left = left + other_half;
-            let v = &intervals[probe];
-            right = half;
-            left = if v.start() < stop { other_left } else { left }
-        }
-        // Guarded at the top from ending on either extreme
-        if intervals[left].start() >= stop {
-            Some(left - 1)
-        } else {
-            Some(left)
-        }
-    }
 
     pub fn super_find<'a>(&'a self, start: u32, stop: u32) -> Vec<&'a I> {
         let mut result = vec![];
@@ -201,34 +144,6 @@ where
         result
     }
 
-    // pub fn super_find<'a>(&'a self, start: u32, stop: u32) -> Vec<&'a I> {
-    //     let mut result = vec![];
-    //     let bounds_start = start.checked_sub(self.max_len).unwrap_or(0);
-    //     let mut offset = Self::lower_bound(bounds_start, &self.intervals);
-    //     let mut cluster_offset = self.get_cluster(offset);
-    //     'index: while cluster_offset < self.index.len() {
-    //         let cluster = &self.index[cluster_offset];
-    //         if start < cluster.max_stop && stop > cluster.min_start {
-    //             // there is at least one match in cluster
-    //             if offset < cluster.start_index {
-    //                 offset = cluster.start_index;
-    //             }
-    //             while offset < cluster.stop_index {
-    //                 let interval = &self.intervals[offset];
-    //                 offset += 1;
-    //                 if interval.overlap(start, stop) {
-    //                     result.push(interval);
-    //                 } else if interval.start() >= stop {
-    //                     break 'index;
-    //                 }
-    //             }
-    //         } else if cluster.min_start >= stop {
-    //             break 'index;
-    //         }
-    //         cluster_offset += 1
-    //     }
-    //     result
-    // }
     /// Create the index based on a set of intervals
     fn build_index(intervals: &Vec<I>) -> (usize, Vec<Cluster>) {
         let interval_len = intervals.len();
@@ -257,40 +172,6 @@ where
         }
         ((interval_len as f64).sqrt().ceil() as usize, index)
     }
-
-    // pub fn super_find<'a>(&'a self, start: u32, stop: u32) -> Vec<&'a I> {
-    //     let mut result = vec![];
-
-    //     let start_splt = u32x8::splat(start);
-    //     let stop_splt = u32x8::splat(stop);
-    //     let offset =
-    //         Self::lower_bound_flat(start.checked_sub(self.max_len).unwrap_or(0), &self.starts);
-
-    //     let mut break_early = false;
-    //     for i in offset..self.total_vecs {
-    //         let starts = self.starts[i];
-    //         let stops = self.stops[i];
-
-    //         let starts_lt_stop = starts.lt(stop_splt);
-    //         let stops_gt_start = stops.gt(start_splt);
-    //         let start_and_stop = starts_lt_stop.eq(stops_gt_start); // check overlap
-    //         let starts_ge_stop = starts.ge(stop_splt); // check break condition
-
-    //         for j in 0..ELEM_PER_VEC {
-    //             if start_and_stop.extract(j) {
-    //                 result.push(&self.intervals[i * ELEM_PER_VEC + j]);
-    //             } else if starts_ge_stop.extract(j) {
-    //                 break_early = true;
-    //                 break;
-    //             }
-    //         }
-    //         if break_early {
-    //             break;
-    //         }
-    //     }
-
-    //     return result;
-    // }
 
     /// Find all intevals that overlap start .. stop. This method will work when queries
     /// to this lapper are in sorted (start) order. It uses a linear search from the last query
@@ -361,68 +242,16 @@ where
                 max_len = i_len;
             }
         }
-        let raw_vecs = intervals.len() / ELEM_PER_VEC;
-        let modu = intervals.len() % ELEM_PER_VEC;
-        let total_vecs = raw_vecs + (if modu > 0 { 1 } else { 0 });
-        let mut starts: Vec<u32x8> = vec![];
-        let mut stops: Vec<u32x8> = vec![];
-        for i in 0..total_vecs {
-            let mut start_tmp = vec![];
-            let mut stop_tmp = vec![];
-            for j in 0..ELEM_PER_VEC {
-                if i * ELEM_PER_VEC + j < intervals.len() {
-                    start_tmp.push(intervals[i * ELEM_PER_VEC + j].start());
-                    stop_tmp.push(intervals[i * ELEM_PER_VEC + j].stop());
-                } else {
-                    start_tmp.push(std::u32::MAX);
-                    stop_tmp.push(std::u32::MAX);
-                }
-            }
-            starts.push(u32x8::from_slice_unaligned(&start_tmp));
-            stops.push(u32x8::from_slice_unaligned(&stop_tmp));
-        }
         // create index
         let (universe_div, index) = Self::build_index(&intervals);
 
-        // Augment with max_lens
-        let mut max_lens = vec![];
-        for j in 0..index.len() {
-            let div_start = index[j].start_index;
-            let div_end = index[j].stop_index;
-            let mut max_len = intervals[div_start].stop() - intervals[div_start].start();
-            max_lens.push(max_len);
-            for iv in intervals[div_start + 1..div_end].iter() {
-                if iv.stop() - iv.start() > max_len {
-                    max_len = iv.stop();
-                }
-                max_lens.push(max_len);
-            }
-        }
-        let mut max_ends = vec![];
-        for j in 0..index.len() {
-            let div_start = index[j].start_index;
-            let div_end = index[j].stop_index;
-            let mut max_end = intervals[div_start].stop();
-            max_ends.push(max_end);
-            for iv in intervals[div_start + 1..div_end].iter().rev() {
-                if iv.stop() > max_end {
-                    max_end = iv.stop();
-                }
-                max_ends.push(max_end);
-            }
-        }
         Lapper {
             intervals,
             max_len,
             cursor: 0,
             phantom_type: PhantomData,
-            total_vecs: total_vecs,
-            starts: starts,
-            stops: stops,
             universe_div: universe_div,
             index: index,
-            max_lens: max_lens,
-            max_ends: max_ends,
         }
     }
 
